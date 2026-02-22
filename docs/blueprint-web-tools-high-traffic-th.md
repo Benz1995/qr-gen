@@ -189,3 +189,18 @@ Dimension หลัก:
 - Page RPM 35–120 บาท
 
 ถ้าได้ตามนี้ ให้ขยาย tool cluster ต่อทันที
+
+## 12) Security Hardening (ป้องกันการโดนแฮก)
+
+- ใช้ server-side RBAC เท่านั้น ห้ามพึ่ง frontend check
+- member เห็นข้อมูลตัวเองเท่านั้น (`owner_user_id = current_user`)
+- admin ต้องใช้ MFA และทุกการกระทำต้องมี `admin_audit_logs`
+- เปิด rate limit: login/signup/tool-run/admin endpoints
+- เปิด RLS + ownership policies ที่ระดับฐานข้อมูล
+- ใช้ HTTP-only secure cookies + CSRF protection
+- ใส่ security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- sanitize input/output และใช้ prepared statements ป้องกัน SQLi/XSS
+- มี monitoring + alert สำหรับ auth fail spike และ admin anomaly
+
+รายละเอียดเช็กลิสต์ดูที่ `docs/security-hardening-th.md`
+

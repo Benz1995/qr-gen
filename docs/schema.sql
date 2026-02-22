@@ -6,7 +6,10 @@ create table if not exists app_users (
   display_name text,
   auth_provider text not null default 'magic_link',
   role text not null default 'member' check (role in ('member', 'admin')),
-  created_at timestamptz not null default now()
+  mfa_enabled boolean not null default false,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists tools_catalog (
@@ -17,7 +20,6 @@ create table if not exists tools_catalog (
   created_at timestamptz not null default now()
 );
 
--- Items created by each user; member dashboard lists only rows where owner_user_id = current user
 create table if not exists user_created_items (
   id uuid primary key,
   owner_user_id uuid not null references app_users(id) on delete cascade,
@@ -54,7 +56,9 @@ create table if not exists traffic_events (
       'dashboard_view',
       'admin_view',
       'ad_impression',
-      'ad_click'
+      'ad_click',
+      'rate_limited',
+      'auth_failed'
     )
   ),
   occurred_at timestamptz not null default now(),
@@ -66,6 +70,7 @@ create table if not exists traffic_events (
   country_code text,
   device_type text,
   referrer_host text,
+  ip_hash text,
   utm_source text,
   utm_medium text,
   utm_campaign text,
@@ -80,6 +85,16 @@ create table if not exists admin_audit_logs (
   target_id text,
   detail jsonb,
   created_at timestamptz not null default now()
+);
+
+create table if not exists security_incidents (
+  id bigserial primary key,
+  severity text not null check (severity in ('low','medium','high','critical')),
+  event_source text not null,
+  summary text not null,
+  payload jsonb,
+  detected_at timestamptz not null default now(),
+  resolved_at timestamptz
 );
 
 create table if not exists ad_daily_metrics (
@@ -102,7 +117,9 @@ create index if not exists idx_user_tool_pref_last_used on user_tool_preferences
 create index if not exists idx_traffic_events_occurred_at on traffic_events(occurred_at desc);
 create index if not exists idx_traffic_events_tool_event on traffic_events(tool_slug, event_name, occurred_at desc);
 create index if not exists idx_traffic_events_page_event on traffic_events(page_path, event_name, occurred_at desc);
+create index if not exists idx_traffic_events_ip_event on traffic_events(ip_hash, event_name, occurred_at desc);
 create index if not exists idx_admin_audit_logs_admin_time on admin_audit_logs(admin_user_id, created_at desc);
+create index if not exists idx_security_incidents_detected on security_incidents(detected_at desc);
 
 create materialized view if not exists weekly_kpi as
 select
@@ -114,6 +131,8 @@ select
   count(*) filter (where event_name = 'favorite_tool') as favorites,
   count(*) filter (where event_name = 'dashboard_view') as dashboard_views,
   count(*) filter (where event_name = 'admin_view') as admin_views,
+  count(*) filter (where event_name = 'rate_limited') as rate_limited_events,
+  count(*) filter (where event_name = 'auth_failed') as auth_failed_events,
   count(*) filter (where event_name = 'ad_impression') as ad_impressions,
   count(*) filter (where event_name = 'ad_click') as ad_clicks
 from traffic_events
