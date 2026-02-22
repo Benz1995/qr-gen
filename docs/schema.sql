@@ -1,10 +1,11 @@
--- Schema for high-traffic web tools (free + ads + free members)
+-- Schema for high-traffic web tools (free + ads + free members) with strict member/admin separation
 
 create table if not exists app_users (
   id uuid primary key,
   email text unique not null,
   display_name text,
   auth_provider text not null default 'magic_link',
+  role text not null default 'member' check (role in ('member', 'admin')),
   created_at timestamptz not null default now()
 );
 
@@ -14,6 +15,20 @@ create table if not exists tools_catalog (
   category text not null,
   is_active boolean not null default true,
   created_at timestamptz not null default now()
+);
+
+-- Items created by each user; member dashboard lists only rows where owner_user_id = current user
+create table if not exists user_created_items (
+  id uuid primary key,
+  owner_user_id uuid not null references app_users(id) on delete cascade,
+  tool_slug text not null references tools_catalog(slug) on delete restrict,
+  title text,
+  input_payload jsonb not null,
+  output_payload jsonb,
+  tags text[] not null default '{}',
+  is_deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists user_tool_preferences (
@@ -36,6 +51,8 @@ create table if not exists traffic_events (
       'member_signup',
       'member_login',
       'favorite_tool',
+      'dashboard_view',
+      'admin_view',
       'ad_impression',
       'ad_click'
     )
@@ -44,6 +61,7 @@ create table if not exists traffic_events (
   session_id text,
   user_id uuid references app_users(id) on delete set null,
   tool_slug text references tools_catalog(slug) on delete set null,
+  item_id uuid references user_created_items(id) on delete set null,
   page_path text not null,
   country_code text,
   device_type text,
@@ -52,6 +70,16 @@ create table if not exists traffic_events (
   utm_medium text,
   utm_campaign text,
   metadata jsonb
+);
+
+create table if not exists admin_audit_logs (
+  id bigserial primary key,
+  admin_user_id uuid not null references app_users(id) on delete restrict,
+  action text not null,
+  target_type text,
+  target_id text,
+  detail jsonb,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists ad_daily_metrics (
@@ -64,10 +92,17 @@ create table if not exists ad_daily_metrics (
   primary key (metric_date, page_path)
 );
 
+create index if not exists idx_user_created_items_owner_created
+  on user_created_items(owner_user_id, created_at desc)
+  where is_deleted = false;
+create index if not exists idx_user_created_items_owner_updated
+  on user_created_items(owner_user_id, updated_at desc)
+  where is_deleted = false;
 create index if not exists idx_user_tool_pref_last_used on user_tool_preferences(user_id, last_used_at desc);
 create index if not exists idx_traffic_events_occurred_at on traffic_events(occurred_at desc);
 create index if not exists idx_traffic_events_tool_event on traffic_events(tool_slug, event_name, occurred_at desc);
 create index if not exists idx_traffic_events_page_event on traffic_events(page_path, event_name, occurred_at desc);
+create index if not exists idx_admin_audit_logs_admin_time on admin_audit_logs(admin_user_id, created_at desc);
 
 create materialized view if not exists weekly_kpi as
 select
@@ -77,6 +112,8 @@ select
   count(*) filter (where event_name = 'result_download') as result_downloads,
   count(*) filter (where event_name = 'member_signup') as member_signups,
   count(*) filter (where event_name = 'favorite_tool') as favorites,
+  count(*) filter (where event_name = 'dashboard_view') as dashboard_views,
+  count(*) filter (where event_name = 'admin_view') as admin_views,
   count(*) filter (where event_name = 'ad_impression') as ad_impressions,
   count(*) filter (where event_name = 'ad_click') as ad_clicks
 from traffic_events

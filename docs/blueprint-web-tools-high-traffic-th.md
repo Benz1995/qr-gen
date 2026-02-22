@@ -1,7 +1,7 @@
 # Blueprint: โปรเจกต์เว็บ Tool ง่าย ๆ เรียกคนใช้เยอะ ๆ
 
 ## เป้าหมาย
-สร้างเว็บที่มีเครื่องมือใช้ง่าย โหลดเร็ว ตอบโจทย์ค้นหาเฉพาะทาง แล้วโตด้วย SEO จนเกิดทราฟฟิกจำนวนมาก ก่อน monetize ด้วย Ads และค่อยเพิ่ม member features
+สร้างเว็บที่มีเครื่องมือใช้ง่าย โหลดเร็ว ตอบโจทย์ค้นหาเฉพาะทาง แล้วโตด้วย SEO จนเกิดทราฟฟิกจำนวนมาก ก่อน monetize ด้วย Ads และมีระบบสมาชิกที่แยกสิทธิ์ชัดเจนระหว่างผู้ใช้ทั่วไปกับผู้ดูแลระบบ
 
 ---
 
@@ -31,25 +31,49 @@
 - `/tools/[slug]` หน้า Tool รายตัว
 - `/category/[slug]` รวม Tool ตามหมวด
 - `/blog/[slug]` บทความแก้ปัญหา long-tail
-- `/dashboard` สมาชิกเก็บ history/favorites
+- `/dashboard` สมาชิกดูรายการที่ตัวเองเคยสร้างทั้งหมด
+- `/dashboard/item/[id]` ดูรายละเอียด/แก้ชื่อ/ลบ รายการของตัวเอง
+- `/admin` แดชบอร์ดผู้ดูแลระบบ (admin only)
 - `/auth/login` สมัคร/ล็อกอิน
 - `/privacy` `/terms` `/about`
 
 ---
 
-## 3) Monetization (ไม่ซับซ้อน)
+## 3) การแยกระบบสิทธิ์ (สำคัญ)
+
+### ผู้ใช้ทั่วไป (member)
+- เข้าได้เฉพาะ `/dashboard` ของตัวเอง
+- เห็นเฉพาะข้อมูลที่ `owner_user_id = ผู้ใช้คนนั้น`
+- ดูรายการที่เคยสร้างทั้งหมด (เช่น QR ที่ generate, ไฟล์ที่แปลง)
+- ลบ/แก้ชื่อได้เฉพาะของตัวเอง
+
+### ผู้ดูแลระบบ (admin)
+- เข้า `/admin` ได้เท่านั้น
+- เห็นข้อมูลรวมระบบ, moderation, metrics
+- **ห้ามใช้หน้า member dashboard แทนผู้ใช้**
+- การเข้าถึงข้อมูลผู้ใช้รายคนทำได้เฉพาะหน้าจัดการ admin พร้อม audit log
+
+### กฎบังคับระดับ backend
+- ตรวจ role ทุก endpoint ฝั่ง server
+- Query ต้องมีเงื่อนไข owner เสมอใน member APIs
+- Admin APIs ต้อง require `role = admin`
+- ห้ามเช็คสิทธิ์แค่ฝั่ง frontend
+
+---
+
+## 4) Monetization (ไม่ซับซ้อน)
 
 ### ระยะเริ่มต้น
 - ฟรีทั้งหมด + AdSense
 - วาง ads เฉพาะตำแหน่งที่ไม่ขัด workflow (max 2–3 จุด/หน้า)
 
 ### ระยะต่อไป
-- สมาชิกฟรี: เก็บประวัติ/รายการโปรด
+- สมาชิกฟรี: เก็บประวัติ/รายการโปรด/รายการที่เคยสร้าง
 - Optional Pro (ทีหลัง): ปิดโฆษณา + batch processing + export เพิ่ม
 
 ---
 
-## 4) SEO System ที่ทำให้โต
+## 5) SEO System ที่ทำให้โต
 
 ### Page template ที่ต้องมีทุก Tool
 - Title/H1 เฉพาะ intent
@@ -69,21 +93,23 @@
 
 ---
 
-## 5) User Retention (ดึงกลับมาใช้ซ้ำ)
+## 6) User Retention (ดึงกลับมาใช้ซ้ำ)
 
 - Sign in ฟรีเพื่อบันทึกการใช้งานล่าสุด
 - Favorite tools
 - Recently used
+- ประวัติรายการที่เคยสร้างทั้งหมด
 - แชร์ลิงก์ผลลัพธ์ได้ (ถ้าทำได้)
 
 KPI retention:
 - Returning users 7 วัน
 - Member signup rate
 - Avg tools used/session
+- Saved items / member
 
 ---
 
-## 6) Stack แนะนำ (ทำไว)
+## 7) Stack แนะนำ (ทำไว)
 
 - Frontend: Next.js + Tailwind
 - API: Next.js Route Handlers
@@ -94,7 +120,25 @@ KPI retention:
 
 ---
 
-## 7) Event Tracking ที่ควรมี
+## 8) API แยก member/admin
+
+### Member APIs
+- `POST /api/tools/run` รัน tool และบันทึกประวัติของผู้ใช้
+- `GET /api/dashboard/items` ดึงรายการที่ผู้ใช้คนนี้เคยสร้าง
+- `GET /api/dashboard/items/:id` ดูรายละเอียดรายการของตัวเอง
+- `PATCH /api/dashboard/items/:id` แก้ชื่อ/tag ของตัวเอง
+- `DELETE /api/dashboard/items/:id` ลบรายการของตัวเอง
+
+### Admin APIs
+- `GET /api/admin/overview` ภาพรวม usage + revenue
+- `GET /api/admin/users` รายชื่อผู้ใช้และสถิติ
+- `GET /api/admin/tools` health ของแต่ละ tool
+
+ทุก `/api/admin/*` ต้องเช็ค role = admin และบันทึก audit log
+
+---
+
+## 9) Event Tracking ที่ควรมี
 
 Event หลัก:
 - `page_view`
@@ -103,6 +147,8 @@ Event หลัก:
 - `result_download`
 - `member_signup`
 - `favorite_tool`
+- `dashboard_view`
+- `admin_view`
 - `ad_impression`
 - `ad_click`
 
@@ -111,17 +157,18 @@ Dimension หลัก:
 
 ---
 
-## 8) แผนลงมือ 7 วัน (ปล่อยใช้จริง)
+## 10) แผนลงมือ 7 วัน (ปล่อยใช้จริง)
 
 ### Day 1–2
 - ตั้งโครงเว็บ + Home + Tool page template
 - ทำ tool แรก 3 ตัว
 
 ### Day 3–4
-- เพิ่มอีก 3–5 tools
-- ทำ auth + favorites + recently used
+- ทำ auth + role (member/admin)
+- ทำ member dashboard ให้เห็นรายการที่ตนเองสร้างทั้งหมด
 
 ### Day 5
+- ทำ admin dashboard (overview only) + audit log เบื้องต้น
 - ติด GA4 + event tracking + AdSense
 
 ### Day 6
@@ -129,10 +176,11 @@ Dimension หลัก:
 
 ### Day 7
 - ปรับ Core Web Vitals + submit sitemap + indexing
+- ทดสอบสิทธิ์ member/admin ครบทุก endpoint
 
 ---
 
-## 9) KPI 60 วันแรก
+## 11) KPI 60 วันแรก
 
 - 50,000 sessions/เดือน
 - Returning users > 18%
